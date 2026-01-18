@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grit-Inspired Habit Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212; /* Dark background */
+            color: #e0e0e0; /* Light text */
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h2 {
+            color: #ffffff;
+        }
+        #login-section, #app-section {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1e1e1e; /* Darker card background */
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+        input, button {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            border: none;
+        }
+        input {
+            background-color: #2c2c2c;
+            color: #e0e0e0;
+        }
+        button {
+            background-color: #4caf50; /* Green for actions */
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .habit-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #2c2c2c;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .habit-item.completed {
+            background-color: #388e3c; /* Darker green for completed */
+        }
+        .streak {
+            color: #ffeb3b; /* Yellow for streaks */
+        }
+        #points {
+            color: #2196f3; /* Blue for points */
+        }
+        #level {
+            color: #f44336; /* Red for level */
+        }
+        .upgrade-unlocked {
+            color: #ff9800; /* Orange for upgrades */
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js"></script>
+</head>
+<body>
+    <div id="login-section">
+        <h1>Login to Your Habit Tracker</h1>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button id="login-btn">Login</button>
+        <p id="login-error" style="color: red;"></p>
+    </div>
+
+    <div id="app-section" class="hidden">
+        <h1>Your Daily Habits</h1>
+        <p>Points: <span id="points">0</span></p>
+        <p>Level: <span id="level">1</span></p>
+        <div id="upgrades"></div>
+        
+        <input type="text" id="new-habit" placeholder="Add new habit">
+        <button id="add-habit-btn">Add Habit</button>
+        
+        <div id="habits-list"></div>
+        
+        <button id="logout-btn">Logout</button>
+    </div>
+
+    <script>
+        // Replace with your Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDGkfGz4bykcBWniVwiZLynBOQB4WlLgW4",
+            authDomain: "habits-app-62ac1.firebaseapp.com",
+            projectId: "habits-app-62ac1",
+            storageBucket: "habits-app-62ac1.firebasestorage.app",
+            messagingSenderId: "332846498109",
+            appId: "1:332846498109:web:3d6d4126ef61ff4331c554"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // User data
+        let userId;
+        let habits = [];
+        let points = 0;
+        let level = 1;
+        let upgrades = ['Basic Theme']; // Start with basic, unlock more with levels
+
+        // Login
+        document.getElementById('login-btn').addEventListener('click', () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            auth.signInWithEmailAndPassword(email, password)
+                .then(userCredential => {
+                    userId = userCredential.user.uid;
+                    loadUserData();
+                    document.getElementById('login-section').classList.add('hidden');
+                    document.getElementById('app-section').classList.remove('hidden');
+                })
+                .catch(error => {
+                    document.getElementById('login-error').textContent = error.message;
+                });
+        });
+
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            auth.signOut().then(() => {
+                document.getElementById('app-section').classList.add('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+            });
+        });
+
+        // Load user data from Firestore
+        function loadUserData() {
+            const userDoc = db.collection('users').doc(userId);
+            userDoc.get().then(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    habits = data.habits || [];
+                    points = data.points || 0;
+                    level = data.level || 1;
+                    upgrades = data.upgrades || ['Basic Theme'];
+                    renderHabits();
+                    updateStats();
+                } else {
+                    // New user
+                    saveUserData();
+                }
+            });
+        }
+
+        // Save user data to Firestore
+        function saveUserData() {
+            db.collection('users').doc(userId).set({
+                habits,
+                points,
+                level,
+                upgrades
+            });
+        }
+
+        // Add habit
+        document.getElementById('add-habit-btn').addEventListener('click', () => {
+            const newHabit = document.getElementById('new-habit').value.trim();
+            if (newHabit) {
+                habits.push({
+                    name: newHabit,
+                    completed: false,
+                    streak: 0,
+                    lastCompleted: null
+                });
+                document.getElementById('new-habit').value = '';
+                renderHabits();
+                saveUserData();
+            }
+        });
+
+        // Render habits
+        function renderHabits() {
+            const habitsList = document.getElementById('habits-list');
+            habitsList.innerHTML = '';
+            habits.forEach((habit, index) => {
+                const div = document.createElement('div');
+                div.className = 'habit-item' + (habit.completed ? ' completed' : '');
+                div.innerHTML = `
+                    <span>${habit.name} <span class="streak">(Streak: ${habit.streak})</span></span>
+                    <button onclick="toggleComplete(${index})">${habit.completed ? 'Undo' : 'Complete'}</button>
+                `;
+                habitsList.appendChild(div);
+            });
+        }
+
+        // Toggle complete
+        window.toggleComplete = function(index) {
+            const habit = habits[index];
+            const today = new Date().toDateString();
+            if (habit.completed) {
+                // Undo
+                habit.completed = false;
+                habit.streak = Math.max(0, habit.streak - 1);
+                points -= 10;
+            } else {
+                // Complete
+                habit.completed = true;
+                if (habit.lastCompleted === today - 1) { // Assuming sequential days for simplicity
+                    habit.streak++;
+                } else {
+                    habit.streak = 1;
+                }
+                habit.lastCompleted = today;
+                points += 10;
+            }
+            checkLevelUp();
+            renderHabits();
+            updateStats();
+            saveUserData();
+        };
+
+        // Check level up and upgrades
+        function checkLevelUp() {
+            const newLevel = Math.floor(points / 100) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                // Unlock upgrade every level
+                upgrades.push(`Theme Level ${level}`);
+            }
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('points').textContent = points;
+            document.getElementById('level').textContent = level;
+            const upgradesDiv = document.getElementById('upgrades');
+            upgradesDiv.innerHTML = '<h2>Upgrades:</h2>' + upgrades.map(u => `<p class="upgrade-unlocked">${u}</p>`).join('');
+        }
+
+        // Reset daily (simple, not automated)
+        // For now, assume user logs in daily; streaks are basic
+    </script>
+</body>
+</html>
