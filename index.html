@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grit-Inspired Habit Tracker</title>
+    <link rel="icon" href="data:,"> <!-- Suppresses favicon 404 error -->
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -71,10 +72,10 @@
             display: none;
         }
     </style>
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js"></script>
+    <!-- Firebase compat SDKs (for browser compatibility without modules) -->
+    <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <div id="login-section">
@@ -218,7 +219,10 @@
             } else {
                 // Complete
                 habit.completed = true;
-                if (habit.lastCompleted === today - 1) { // Assuming sequential days for simplicity
+                const lastCompletedDate = habit.lastCompleted ? new Date(habit.lastCompleted) : null;
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                if (lastCompletedDate && lastCompletedDate.toDateString() === yesterday.toDateString()) {
                     habit.streak++;
                 } else {
                     habit.streak = 1;
